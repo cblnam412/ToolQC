@@ -38,7 +38,30 @@ app.use('/api/projects/:projectId/links',         linkRoutes);
 app.use('/api/projects/:projectId/notes',         noteRoutes);
 app.use('/api/projects/:projectId/graphs',        graphRoutes);
 app.use('/api/projects/:projectId/apis',          apiRoutes);
-app.use('/api/settings',                          settingRoutes);
+// ── Proxy Download (for Sharepoint/OneDrive links) ───────────────────────────
+app.post('/api/proxy/download-excel', async (req, res) => {
+    let { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing URL' });
+    
+    // Auto convert Sharepoint/OneDrive links to direct download
+    if (url.includes('sharepoint.com') || url.includes('onedrive.live.com')) {
+        url = url.split('?')[0] + '?download=1';
+    }
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+    } catch (err) {
+        console.error('[Proxy Error]', err);
+        res.status(500).json({ error: 'Failed to download file: ' + err.message });
+    }
+});
 
 // ── Serve Frontend (Production Mode) ────────────────────────────────────────
 const frontendPath = path.join(__dirname, '../frontend/dist');

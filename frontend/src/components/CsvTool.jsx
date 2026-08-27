@@ -16,6 +16,8 @@ export default function CsvTool({ toast }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [linkUrl, setLinkUrl] = useState('');
+  const [isLoadingLink, setIsLoadingLink] = useState(false);
   
   const fileInputRef = useRef(null);
   const tableContainerRef = useRef(null);
@@ -94,6 +96,36 @@ export default function CsvTool({ toast }) {
   function handleSheetChange(e) {
     setActiveSheet(e.target.value);
     if (workbook) loadSheet(workbook, e.target.value);
+  }
+
+  async function handleLoadFromLink() {
+    if (!linkUrl.trim()) return toast('Vui lòng nhập Link Excel!', 'error');
+    try {
+      setIsLoadingLink(true);
+      toast('Đang tải file từ Cloud...');
+      const res = await fetch('/api/proxy/download-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: linkUrl.trim() })
+      });
+      if (!res.ok) throw new Error(await res.text() || 'Failed to download');
+      const arrayBuffer = await res.arrayBuffer();
+      
+      const wb = window.XLSX.read(arrayBuffer, { type: 'array' });
+      setWorkbook(wb);
+      setSheetNames(wb.SheetNames);
+      setFilename('Từ Cloud: ' + (wb.SheetNames[0] || 'Unknown'));
+      if (wb.SheetNames.length > 0) {
+        setActiveSheet(wb.SheetNames[0]);
+        loadSheet(wb, wb.SheetNames[0]);
+        toast('Đã tải thành công!');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Lỗi khi tải từ link: ' + err.message, 'error');
+    } finally {
+      setIsLoadingLink(false);
+    }
   }
 
   function updateCell(row, col, value) {
@@ -217,7 +249,7 @@ export default function CsvTool({ toast }) {
       <div className="csv-toolbar glass-panel">
         <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <label className="btn-primary" style={{ cursor: 'pointer' }}>
-            <i className="fa-solid fa-upload" /> Chọn file CSV / XLSX
+            <i className="fa-solid fa-file-excel" /> Mở File
             <input
               ref={fileInputRef}
               type="file"
@@ -226,7 +258,26 @@ export default function CsvTool({ toast }) {
               onChange={handleFileChange}
             />
           </label>
-          <span className="csv-filename">{filename || 'Chưa chọn file nào'}</span>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--panel-bg)', padding: '2px 4px', borderRadius: '4px', border: '1px solid var(--panel-border)' }}>
+            <input 
+              type="text" 
+              placeholder="Nhập link Sharepoint/OneDrive..." 
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              style={{ background: 'transparent', border: 'none', color: '#fff', width: '220px', padding: '0.3rem 0.5rem', outline: 'none' }}
+            />
+            <button 
+              className="btn-primary" 
+              style={{ padding: '0.3rem 0.6rem' }} 
+              onClick={handleLoadFromLink}
+              disabled={isLoadingLink}
+            >
+              {isLoadingLink ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-cloud-arrow-down" />}
+            </button>
+          </div>
+
+          <span className="csv-filename">{filename || 'Chưa nạp dữ liệu'}</span>
           {sheetNames.length > 1 && (
             <select value={activeSheet} onChange={handleSheetChange} className="sheet-select">
               {sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
